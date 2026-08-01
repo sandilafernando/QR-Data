@@ -159,11 +159,6 @@
         <!-- ================= PHONE RECEIVER SECTION ================= -->
         <section id="sec-rx" class="space-y-4 hidden">
             <div class="flex flex-col space-y-4">
-                
-                <!-- Security Context Warning -->
-                <div id="https-warning" class="hidden p-3 bg-red-950/80 border border-red-500 rounded-xl text-xs text-red-200">
-                    <span class="font-bold">SECURITY CONTEXT ERROR:</span> Camera access is blocked because you are browsing over an insecure HTTP connection. Open this page via <code class="bg-black px-1 rounded text-white">https://</code> or Localtunnel.
-                </div>
 
                 <!-- Camera Viewport Mobile Optimized -->
                 <div class="glass-panel rounded-xl p-3 relative overflow-hidden flex flex-col items-center justify-center min-h-[260px] sm:min-h-[340px]">
@@ -247,11 +242,6 @@
                 animFrameId: null
             }
         };
-
-        // Validate security context on load
-        if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            document.getElementById('https-warning').classList.remove('hidden');
-        }
 
         function switchMode(mode) {
             STATE.mode = mode;
@@ -419,24 +409,35 @@
             }
         }
 
-        /* Receiver Camera Operations */
+        /* Receiver Camera Operations Optimized for iOS & Mobile */
         async function startCamera() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert("SECURITY CONTEXT ERROR:\n\niOS forbids camera access unless the page is loaded over HTTPS.\n\nUse your HTTPS Vite URL or Localtunnel address.");
+                alert("Camera API unavailable. Ensure you are accessing this site via HTTPS.");
                 return;
             }
 
             try {
+                // Advanced constraints to target mobile back camera with autofocus
                 const constraints = {
                     video: { 
-                        facingMode: { ideal: "environment" },
+                        facingMode: { exact: "environment" },
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     },
                     audio: false
                 };
 
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (fallbackErr) {
+                    // Fallback to basic environment camera if exact mode fails on some devices
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: "environment" },
+                        audio: false
+                    });
+                }
+
                 STATE.rx.videoStream = stream;
 
                 const video = document.getElementById('webcam');
@@ -451,7 +452,7 @@
                 requestAnimationFrame(scanTick);
             } catch (err) {
                 console.error("Camera initialisation failed:", err);
-                alert("Camera Error: " + err.message + "\nEnsure camera permissions are enabled for this browser in iOS Settings.");
+                alert("Camera Access Error: " + err.message + "\nPlease grant camera permissions in iOS Settings -> Browser.");
             }
         }
 
@@ -469,7 +470,8 @@
             const video = document.getElementById('webcam');
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 const canvas = document.getElementById('cam-canvas');
-                // Optimise canvas decoding resolution (max 640px wide) for higher performance
+                
+                // Downscale resolution to max 640px to ensure fast real-time JS processing
                 const scale = Math.min(1, 640 / video.videoWidth);
                 canvas.width = video.videoWidth * scale;
                 canvas.height = video.videoHeight * scale;
@@ -479,12 +481,14 @@
 
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
-                // Fast QR scan with inverted attempts disabled for maximum frame rates
+                // High-speed QR scanning configuration
                 const code = jsQR(imageData.data, imageData.width, imageData.height, {
                     inversionAttempts: "dontInvert",
                 });
 
-                if (code) processDecodedQR(code.data);
+                if (code && code.data) {
+                    processDecodedQR(code.data);
+                }
             }
             STATE.rx.animFrameId = requestAnimationFrame(scanTick);
         }
