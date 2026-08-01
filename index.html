@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QUANTUM-LINK // Visual Air-Gap Transfer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#000000',
+                            card: '#0A0C10',
+                            border: '#1A202C',
+                            cyan: '#00F0FF',
+                            magenta: '#FF007A',
+                            green: '#00FF66',
+                            yellow: '#FFE600'
+                        }
+                    },
+                    boxShadow: {
+                        'neon-cyan': '0 0 15px rgba(0, 240, 255, 0.4)',
+                        'neon-green': '0 0 15px rgba(0, 255, 102, 0.4)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- QRCode & jsQR Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+    <style>
+        body {
+            background-color: #000000;
+            color: #E2E8F0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.03) 0%, transparent 70%),
+                linear-gradient(rgba(15, 23, 42, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 23, 42, 0.3) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
+        }
+
+        .glass-panel {
+            background: rgba(10, 12, 16, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #000000; }
+        ::-webkit-scrollbar-thumb { background: #00F0FF; border-radius: 2px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-slate-200">
+
+    <!-- Header -->
+    <header class="border-b border-cyber-border glass-panel sticky top-0 z-40 px-4 py-3">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <div class="w-2.5 h-2.5 rounded-full bg-cyber-green shadow-neon-green"></div>
+                <h1 class="text-lg font-bold tracking-wider text-white">QUANTUM<span class="text-cyber-cyan">//</span>LINK</h1>
+            </div>
+            
+            <div class="flex space-x-1 bg-black p-1 rounded-lg border border-cyber-border">
+                <button id="tab-tx" onclick="switchMode('tx')" class="px-3 py-1.5 rounded text-xs font-bold transition-all bg-cyber-cyan text-black shadow-neon-cyan">
+                    LAPTOP (TX)
+                </button>
+                <button id="tab-rx" onclick="switchMode('rx')" class="px-3 py-1.5 rounded text-xs font-bold transition-all text-gray-400 hover:text-white">
+                    PHONE (RX)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Viewport -->
+    <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6">
+
+        <!-- ================= LAPTOP TRANSMITTER SECTION ================= -->
+        <section id="sec-tx" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                
+                <div class="md:col-span-5 space-y-4">
+                    <!-- File Drop Zone -->
+                    <div id="drop-zone" class="glass-panel border-2 border-dashed border-cyber-cyan/40 hover:border-cyber-cyan rounded-xl p-6 text-center transition-all cursor-pointer relative overflow-hidden">
+                        <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(event)" />
+                        <div class="space-y-2 pointer-events-none flex flex-col items-center">
+                            <svg class="w-8 h-8 text-cyber-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <div class="text-xs font-bold text-cyber-cyan uppercase">SELECT OR DROP PAYLOAD FILE</div>
+                            <div class="text-[10px] text-gray-400">Max Recommended: 2.0 MB</div>
+                        </div>
+                    </div>
+
+                    <!-- Stream Controls -->
+                    <div id="tx-controls" class="glass-panel rounded-xl p-4 space-y-4 hidden">
+                        <div class="border-b border-cyber-border pb-2">
+                            <div id="meta-name" class="font-bold text-sm text-cyber-cyan truncate">-</div>
+                            <div id="meta-size" class="text-xs text-gray-400">-</div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span>Frame Speed (FPS)</span>
+                                    <span id="fps-val" class="text-cyber-cyan font-bold">10 FPS</span>
+                                </div>
+                                <input type="range" id="fps-slider" min="1" max="25" value="10" class="w-full accent-cyber-cyan" oninput="updateFPS(this.value)">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span>Chunk Density</span>
+                                    <span id="chunk-val" class="text-cyber-cyan font-bold">180 B</span>
+                                </div>
+                                <input type="range" id="chunk-slider" min="80" max="500" step="20" value="180" class="w-full accent-cyber-cyan" oninput="updateChunkSize(this.value)">
+                            </div>
+                        </div>
+
+                        <button id="btn-toggle-stream" onclick="toggleStream()" class="w-full py-3 bg-cyber-green text-black font-bold text-xs rounded hover:bg-opacity-80 transition-all shadow-neon-green">
+                            START OPTICAL TRANSMISSION
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Display Box -->
+                <div class="md:col-span-7">
+                    <div class="glass-panel rounded-xl p-4 flex flex-col items-center justify-center min-h-[350px] relative">
+                        <div id="qr-placeholder" class="text-center text-gray-500 space-y-2">
+                            <p class="text-xs">Load a file above to render QR sequence</p>
+                        </div>
+
+                        <div id="qr-container" class="bg-white p-3 rounded-lg shadow-2xl hidden"></div>
+
+                        <div id="stream-diag" class="w-full mt-4 space-y-1 hidden">
+                            <div class="flex justify-between text-xs text-gray-400">
+                                <span>FRAME: <span id="diag-frame" class="text-cyber-cyan">0/0</span></span>
+                                <span>PROGRESS: <span id="diag-progress" class="text-cyber-cyan">0%</span></span>
+                            </div>
+                            <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-cyber-border">
+                                <div id="tx-progress-bar" class="bg-cyber-cyan h-full w-0 transition-all duration-100"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= PHONE RECEIVER SECTION ================= -->
+        <section id="sec-rx" class="space-y-4 hidden">
+            <div class="flex flex-col space-y-4">
+                
+                <!-- Security Context Warning -->
+                <div id="https-warning" class="hidden p-3 bg-red-950/80 border border-red-500 rounded-xl text-xs text-red-200">
+                    <span class="font-bold">SECURITY CONTEXT ERROR:</span> Camera access is blocked because you are browsing over an insecure HTTP connection. Open this page via <code class="bg-black px-1 rounded text-white">https://</code> or Localtunnel.
+                </div>
+
+                <!-- Camera Viewport Mobile Optimized -->
+                <div class="glass-panel rounded-xl p-3 relative overflow-hidden flex flex-col items-center justify-center min-h-[260px] sm:min-h-[340px]">
+                    
+                    <video id="webcam" autoplay playsinline muted class="w-full h-auto max-h-[360px] rounded-lg bg-black border border-cyber-border object-cover hidden"></video>
+                    <canvas id="cam-canvas" class="hidden"></canvas>
+
+                    <div id="cam-placeholder" class="text-center space-y-3 flex flex-col items-center p-4 w-full max-w-xs">
+                        <svg class="w-10 h-10 text-cyber-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                        </svg>
+                        
+                        <button id="btn-start-cam" onclick="startCamera()" class="w-full py-3 bg-cyber-green text-black font-bold text-xs rounded hover:bg-opacity-80 transition-all shadow-neon-green">
+                            START LIVE CAMERA
+                        </button>
+                    </div>
+
+                    <div id="cam-overlay" class="absolute inset-4 border-2 border-cyber-cyan/30 rounded-lg pointer-events-none hidden flex flex-col justify-between p-2">
+                        <div class="flex justify-between">
+                            <div class="w-3 h-3 border-t-2 border-l-2 border-cyber-cyan"></div>
+                            <div class="w-3 h-3 border-t-2 border-r-2 border-cyber-cyan"></div>
+                        </div>
+                        <div class="flex justify-between">
+                            <div class="w-3 h-3 border-b-2 border-l-2 border-cyber-cyan"></div>
+                            <div class="w-3 h-3 border-b-2 border-r-2 border-cyber-cyan"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Capture Dashboard -->
+                <div class="glass-panel rounded-xl p-4 space-y-3">
+                    <div class="flex justify-between items-center border-b border-cyber-border pb-2">
+                        <h2 class="text-xs font-bold text-cyber-cyan uppercase">OPTICAL RECONSTRUCTION</h2>
+                        <span id="rx-status" class="px-2 py-0.5 text-[10px] bg-gray-900 text-gray-400 border border-cyber-border rounded">AWAITING INPUT</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="text-gray-400 truncate">File: <span id="rx-filename" class="text-white font-bold">-</span></div>
+                        <div class="text-gray-400 text-right">Chunks: <span id="rx-chunk-count" class="text-cyber-green font-bold">0 / 0</span></div>
+                    </div>
+
+                    <div class="w-full bg-black h-2.5 rounded-full overflow-hidden border border-cyber-border">
+                        <div id="rx-progress-bar" class="bg-cyber-green h-full w-0 transition-all duration-150"></div>
+                    </div>
+
+                    <div>
+                        <div class="text-[9px] text-gray-400 mb-1 uppercase">Chunk Map</div>
+                        <div id="matrix-grid" class="grid grid-cols-10 gap-1 bg-black p-1.5 rounded border border-cyber-border max-h-28 overflow-y-auto min-h-[50px]"></div>
+                    </div>
+
+                    <button id="btn-download" disabled onclick="downloadReassembledFile()" class="w-full py-3 bg-cyber-green/20 border border-cyber-green text-cyber-green font-bold text-xs rounded opacity-50 cursor-not-allowed transition-all">
+                        ASSEMBLY INCOMPLETE
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const STATE = {
+            mode: 'tx',
+            tx: {
+                file: null,
+                base64: null,
+                chunks: [],
+                metadata: null,
+                intervalId: null,
+                currentFrame: 0,
+                fps: 10,
+                chunkSize: 180,
+                isPlaying: false
+            },
+            rx: {
+                scanning: false,
+                metadata: null,
+                receivedChunks: new Map(),
+                totalChunks: 0,
+                videoStream: null,
+                animFrameId: null
+            }
+        };
+
+        // Validate security context on load
+        if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+            document.getElementById('https-warning').classList.remove('hidden');
+        }
+
+        function switchMode(mode) {
+            STATE.mode = mode;
+            document.getElementById('sec-tx').classList.toggle('hidden', mode !== 'tx');
+            document.getElementById('sec-rx').classList.toggle('hidden', mode !== 'rx');
+
+            const tabTx = document.getElementById('tab-tx');
+            const tabRx = document.getElementById('tab-rx');
+
+            if (mode === 'tx') {
+                tabTx.className = "px-3 py-1.5 rounded text-xs font-bold transition-all bg-cyber-cyan text-black shadow-neon-cyan";
+                tabRx.className = "px-3 py-1.5 rounded text-xs font-bold transition-all text-gray-400 hover:text-white";
+                stopCamera();
+            } else {
+                tabRx.className = "px-3 py-1.5 rounded text-xs font-bold transition-all bg-cyber-cyan text-black shadow-neon-cyan";
+                tabTx.className = "px-3 py-1.5 rounded text-xs font-bold transition-all text-gray-400 hover:text-white";
+                stopTxStream();
+            }
+        }
+
+        /* CRC32 Checksum Engine */
+        function crc32(str) {
+            let crc = 0 ^ (-1);
+            for (let i = 0; i < str.length; i++) {
+                crc = (crc >>> 8) ^ crc32Table[(crc ^ str.charCodeAt(i)) & 0xFF];
+            }
+            return (crc ^ (-1)) >>> 0;
+        }
+        const crc32Table = (() => {
+            let c, table = [];
+            for (let n = 0; n < 256; n++) {
+                c = n;
+                for (let k = 0; k < 8; k++) {
+                    c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+                }
+                table[n] = c;
+            }
+            return table;
+        })();
+
+        /* Transmitter Operations */
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('click', () => document.getElementById('file-input').click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-cyber-cyan'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-cyber-cyan'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-cyber-cyan');
+            if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFileSelect(e) {
+            if (e.target.files.length) processFile(e.target.files[0]);
+        }
+
+        function processFile(file) {
+            STATE.tx.file = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                STATE.tx.base64 = e.target.result;
+                prepareChunks();
+                
+                document.getElementById('meta-name').innerText = file.name;
+                document.getElementById('meta-size').innerText = `${(file.size / 1024).toFixed(1)} KB`;
+                document.getElementById('tx-controls').classList.remove('hidden');
+                document.getElementById('qr-placeholder').classList.add('hidden');
+                document.getElementById('qr-container').classList.remove('hidden');
+                document.getElementById('stream-diag').classList.remove('hidden');
+
+                renderQR(JSON.stringify(STATE.tx.metadata));
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function prepareChunks() {
+            const data = STATE.tx.base64;
+            const chunkSize = STATE.tx.chunkSize;
+            const totalChunks = Math.ceil(data.length / chunkSize);
+
+            STATE.tx.chunks = [];
+            STATE.tx.metadata = {
+                type: 'META',
+                name: STATE.tx.file.name,
+                mime: STATE.tx.file.type,
+                size: STATE.tx.file.size,
+                total: totalChunks,
+                crc: crc32(data)
+            };
+
+            for (let i = 0; i < totalChunks; i++) {
+                const chunkStr = data.slice(i * chunkSize, (i + 1) * chunkSize);
+                STATE.tx.chunks.push({
+                    type: 'DATA',
+                    i: i,
+                    t: totalChunks,
+                    d: chunkStr,
+                    c: crc32(chunkStr)
+                });
+            }
+        }
+
+        function renderQR(payload) {
+            const container = document.getElementById('qr-container');
+            container.innerHTML = '';
+            new QRCode(container, {
+                text: payload,
+                width: 260,
+                height: 260,
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+
+        function toggleStream() {
+            if (STATE.tx.isPlaying) stopTxStream();
+            else startTxStream();
+        }
+
+        function startTxStream() {
+            if (!STATE.tx.chunks.length) return;
+            STATE.tx.isPlaying = true;
+            const btn = document.getElementById('btn-toggle-stream');
+            btn.innerText = "PAUSE TRANSMISSION";
+            btn.className = "w-full py-3 bg-cyber-magenta text-white font-bold text-xs rounded transition-all";
+
+            STATE.tx.intervalId = setInterval(() => {
+                const chunk = STATE.tx.chunks[STATE.tx.currentFrame];
+                renderQR(JSON.stringify(chunk));
+
+                document.getElementById('diag-frame').innerText = `${STATE.tx.currentFrame + 1}/${STATE.tx.chunks.length}`;
+                const pct = Math.round(((STATE.tx.currentFrame + 1) / STATE.tx.chunks.length) * 100);
+                document.getElementById('diag-progress').innerText = `${pct}%`;
+                document.getElementById('tx-progress-bar').style.width = `${pct}%`;
+
+                STATE.tx.currentFrame = (STATE.tx.currentFrame + 1) % STATE.tx.chunks.length;
+            }, 1000 / STATE.tx.fps);
+        }
+
+        function stopTxStream() {
+            STATE.tx.isPlaying = false;
+            const btn = document.getElementById('btn-toggle-stream');
+            if (btn) {
+                btn.innerText = "START OPTICAL TRANSMISSION";
+                btn.className = "w-full py-3 bg-cyber-green text-black font-bold text-xs rounded hover:bg-opacity-80 transition-all shadow-neon-green";
+            }
+            if (STATE.tx.intervalId) clearInterval(STATE.tx.intervalId);
+        }
+
+        function updateFPS(val) {
+            STATE.tx.fps = parseInt(val);
+            document.getElementById('fps-val').innerText = `${val} FPS`;
+            if (STATE.tx.isPlaying) {
+                stopTxStream();
+                startTxStream();
+            }
+        }
+
+        function updateChunkSize(val) {
+            STATE.tx.chunkSize = parseInt(val);
+            document.getElementById('chunk-val').innerText = `${val} B`;
+            if (STATE.tx.file) {
+                stopTxStream();
+                prepareChunks();
+                STATE.tx.currentFrame = 0;
+                renderQR(JSON.stringify(STATE.tx.metadata));
+            }
+        }
+
+        /* Receiver Camera Operations */
+        async function startCamera() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("SECURITY CONTEXT ERROR:\n\niOS forbids camera access unless the page is loaded over HTTPS.\n\nUse your HTTPS Vite URL or Localtunnel address.");
+                return;
+            }
+
+            try {
+                const constraints = {
+                    video: { 
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                STATE.rx.videoStream = stream;
+
+                const video = document.getElementById('webcam');
+                video.srcObject = stream;
+                await video.play();
+
+                document.getElementById('cam-placeholder').classList.add('hidden');
+                video.classList.remove('hidden');
+                document.getElementById('cam-overlay').classList.remove('hidden');
+
+                STATE.rx.scanning = true;
+                requestAnimationFrame(scanTick);
+            } catch (err) {
+                console.error("Camera initialisation failed:", err);
+                alert("Camera Error: " + err.message + "\nEnsure camera permissions are enabled for this browser in iOS Settings.");
+            }
+        }
+
+        function stopCamera() {
+            STATE.rx.scanning = false;
+            if (STATE.rx.videoStream) {
+                STATE.rx.videoStream.getTracks().forEach(track => track.stop());
+            }
+            if (STATE.rx.animFrameId) cancelAnimationFrame(STATE.rx.animFrameId);
+        }
+
+        function scanTick() {
+            if (!STATE.rx.scanning) return;
+
+            const video = document.getElementById('webcam');
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                const canvas = document.getElementById('cam-canvas');
+                // Optimise canvas decoding resolution (max 640px wide) for higher performance
+                const scale = Math.min(1, 640 / video.videoWidth);
+                canvas.width = video.videoWidth * scale;
+                canvas.height = video.videoHeight * scale;
+
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Fast QR scan with inverted attempts disabled for maximum frame rates
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code) processDecodedQR(code.data);
+            }
+            STATE.rx.animFrameId = requestAnimationFrame(scanTick);
+        }
+
+        function processDecodedQR(payloadStr) {
+            try {
+                const packet = JSON.parse(payloadStr);
+
+                if (packet.type === 'META' && !STATE.rx.metadata) {
+                    STATE.rx.metadata = packet;
+                    STATE.rx.totalChunks = packet.total;
+                    document.getElementById('rx-filename').innerText = packet.name;
+                    document.getElementById('rx-status').innerText = "RECEIVING DATA...";
+                    document.getElementById('rx-status').className = "px-2 py-0.5 text-[10px] bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan rounded animate-pulse";
+                    
+                    initMatrixGrid(packet.total);
+                } 
+                else if (packet.type === 'DATA' && STATE.rx.metadata) {
+                    if (!STATE.rx.receivedChunks.has(packet.i)) {
+                        if (crc32(packet.d) === packet.c) {
+                            STATE.rx.receivedChunks.set(packet.i, packet.d);
+                            updateMatrixCell(packet.i, true);
+
+                            const recCount = STATE.rx.receivedChunks.size;
+                            const total = STATE.rx.totalChunks;
+                            document.getElementById('rx-chunk-count').innerText = `${recCount} / ${total}`;
+                            const pct = Math.round((recCount / total) * 100);
+                            document.getElementById('rx-progress-bar').style.width = `${pct}%`;
+
+                            if (recCount === total) completeReconstruction();
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function initMatrixGrid(total) {
+            const grid = document.getElementById('matrix-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < total; i++) {
+                const cell = document.createElement('div');
+                cell.id = `m-cell-${i}`;
+                cell.className = "h-2.5 rounded-sm bg-gray-900 border border-cyber-border";
+                grid.appendChild(cell);
+            }
+        }
+
+        function updateMatrixCell(index, state) {
+            const cell = document.getElementById(`m-cell-${index}`);
+            if (cell) cell.className = "h-2.5 rounded-sm bg-cyber-green border border-cyber-green shadow-neon-green";
+        }
+
+        function completeReconstruction() {
+            STATE.rx.scanning = false;
+            document.getElementById('rx-status').innerText = "COMPLETE";
+            document.getElementById('rx-status').className = "px-2 py-0.5 text-[10px] bg-cyber-green/20 text-cyber-green border border-cyber-green rounded";
+
+            const btn = document.getElementById('btn-download');
+            btn.disabled = false;
+            btn.innerText = "DOWNLOAD REASSEMBLED FILE";
+            btn.className = "w-full py-3 bg-cyber-green text-black font-bold text-xs rounded hover:bg-opacity-80 transition-all shadow-neon-green cursor-pointer";
+        }
+
+        function downloadReassembledFile() {
+            if (STATE.rx.receivedChunks.size !== STATE.rx.totalChunks) return;
+
+            let assembledBase64 = '';
+            for (let i = 0; i < STATE.rx.totalChunks; i++) {
+                assembledBase64 += STATE.rx.receivedChunks.get(i);
+            }
+
+            if (crc32(assembledBase64) !== STATE.rx.metadata.crc) {
+                alert("CRC32 Checksum Mismatch! Data corruption detected.");
+                return;
+            }
+
+            const a = document.createElement('a');
+            a.href = assembledBase64;
+            a.download = STATE.rx.metadata.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>
